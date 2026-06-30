@@ -85,22 +85,11 @@ prometheus.remote_write "default" {
 prometheus.exporter.snmp "network_devices" {
   config_file = "/etc/alloy/snmp_modules.yml"
 
-  target "switch1" {
-    address = "192.168.1.10"
+
+  target "Unifi_USG" {
+    address = "192.168.101.1"
     module  = "if_mib"
-
-    auth {
-      community = "public"   // replace with your actual SNMP community string
-    }
-  }
-
-  target "router1" {
-    address = "192.168.1.1"
-    module  = "if_mib"
-
-    auth {
-      community = "public"
-    }
+    auth    = "snmpuser"
   }
 }
 
