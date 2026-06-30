@@ -21,7 +21,7 @@ loki.source.docker "containers" {
 // Tail system logs
 local.file_match "system" {
   path_targets = [{
-    __path__ = "/var/log/*.log",
+    __path__ = "host/var/log/*.log",
     job      = "varlogs",
   }]
 }

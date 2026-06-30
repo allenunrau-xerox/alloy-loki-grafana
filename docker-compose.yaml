@@ -30,7 +30,7 @@ services:
       - ./config.alloy:/etc/alloy/config.alloy
       - ./snmp_modules.yml:/etc/alloy/snmp_modules.yml
       - alloy-positions:/var/lib/alloy/data
-      - /var/log:/var/log:ro
+      - /var/log:/host/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - rsyslog-logs:/var/log/network:ro
