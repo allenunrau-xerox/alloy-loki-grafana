@@ -1,0 +1,91 @@
+services:
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  rsyslog:
+      build: ./rsyslog
+      container_name: rsyslog
+      ports:
+        - "1514:1514/udp"
+        - "1514:1514/tcp"
+      volumes:
+        - ./rsyslog.conf:/etc/rsyslog.conf:ro
+        - rsyslog-logs:/var/log/network
+      restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    ports:
+      - "12345:12345"   # Alloy's UI/debug port (optional but handy)
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - ./snmp_modules.yml:/etc/alloy/snmp_modules.yml
+      - alloy-positions:/var/lib/alloy/data
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - rsyslog-logs:/var/log/network:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - loki
+      - rsyslog
+      - prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  node-exporter:
+      image: prom/node-exporter:latest
+      container_name: node-exporter
+      ports:
+        - "9100:9100"
+      volumes:
+        - /proc:/host/proc:ro
+        - /sys:/host/sys:ro
+        - /:/rootfs:ro
+      command:
+        - '--path.procfs=/host/proc'
+        - '--path.sysfs=/host/sys'
+        - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  grafana-data:
+  rsyslog-logs:
+  alloy-positions:
+  prometheus-data:

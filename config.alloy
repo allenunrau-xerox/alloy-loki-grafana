@@ -1,0 +1,110 @@
+// Discover and tail Docker container logs
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.write.default.receiver]
+}
+
+// Tail system logs
+local.file_match "system" {
+  path_targets = [{
+    __path__ = "/var/log/*.log",
+    job      = "varlogs",
+  }]
+}
+
+loki.source.file "system" {
+  targets    = local.file_match.system.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+// Tail network device logs (from rsyslog relay)
+local.file_match "network" {
+  path_targets = [{
+    __path__ = "/var/log/network/*.log",
+    job      = "network",
+  }]
+}
+
+loki.process "network" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.regex {
+    source     = "filename"
+    expression = "/var/log/network/(?P<device>.*)\\.log"
+  }
+
+  stage.labels {
+    values = {
+      device = "device",
+    }
+  }
+}
+
+loki.source.file "network" {
+  targets    = local.file_match.network.targets
+  forward_to = [loki.process.network.receiver]
+}
+
+// Ship everything to Loki
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// Scrape node_exporter for host metrics
+prometheus.scrape "node_exporter" {
+  targets = [
+    {"__address__" = "node-exporter:9100"},
+  ]
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// Ship metrics to Prometheus
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// Define SNMP targets - one entry per device you want to poll
+prometheus.exporter.snmp "network_devices" {
+  config_file = "/etc/alloy/snmp_modules.yml"
+
+  target "switch1" {
+    address = "192.168.1.10"
+    module  = "if_mib"
+
+    auth {
+      community = "public"   // replace with your actual SNMP community string
+    }
+  }
+
+  target "router1" {
+    address = "192.168.1.1"
+    module  = "if_mib"
+
+    auth {
+      community = "public"
+    }
+  }
+}
+
+prometheus.scrape "snmp" {
+  targets    = prometheus.exporter.snmp.network_devices.targets
+  forward_to = [prometheus.remote_write.default.receiver]
+}
